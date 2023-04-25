@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
     cv::Mat outImage;
     cv::drawKeypoints(image, vKeypoints, outImage, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
-    cv::imshow("这是ORB-SLAM2提取的特征点", outImage);
+    cv::imshow("ORB-SLAM2 Result", outImage);
 
     orb_feature_ptr->ExtractORB();
     cv::waitKey();

@@ -8,12 +8,121 @@ namespace ORB {
     }
 
     void ORBFeature::ExtractORB() {
-        // TODO 请在这里利用OpenCV函数进行ORB特征点的提取，并在图像上进行显示
+        //请在这里利用OpenCV函数进行ORB特征点的提取，并在图像上进行显示
+        std::vector<cv::KeyPoint> keypoints;
+        cv::Mat descriptors;
+
+        cv::Ptr<cv::FeatureDetector> detector = cv::ORB::create();
+        cv::Ptr<cv::DescriptorExtractor> descriptor = cv::ORB::create();
+
+        detector->detect(this->image, keypoints);
+        descriptor->compute(this->image, keypoints, descriptors);
+
+        cv::Mat opencv_result;
+        cv::drawKeypoints(this->image, keypoints, opencv_result, cv::Scalar::all(-1), cv::DrawMatchesFlags::DEFAULT);
+        cv::imshow("OpenCV Result", opencv_result);
     }
 
     void ORBFeature::ExtractORB(std::vector<cv::KeyPoint> &_keypoints, cv::Mat &_descriptors) {
-        // TODO 请在这里实现使用ORB-SLAM2的方法进行ORB特征点的提取
+        //请在这里实现使用ORB-SLAM2的方法进行ORB特征点的提取
+        int nlevels = camera_ptr->nLevels;
+        // Step 1 检查图像有效性。如果图像为空，那么就直接返回
+        if (this->image.empty())
+            return;
 
+        //判断图像的格式是否正确，要求是单通道灰度值
+        assert(this->image.type() == CV_8UC1);
+
+        // Pre-compute the scale pyramid
+        // Step 2 构建图像金字塔
+        ComputePyramid();
+
+        // Step 3 计算图像的特征点，并且将特征点进行均匀化。均匀的特征点可以提高位姿计算精度
+        // 存储所有的特征点，注意此处为二维的vector，第一维存储的是金字塔的层数，第二维存储的是那一层金字塔图像里提取的所有特征点
+        std::vector<std::vector<cv::KeyPoint>> allKeypoints;
+        //使用四叉树的方式计算每层图像的特征点并进行分配
+        ComputeKeyPointsQuadtree(allKeypoints);
+
+        // Step 4 计算图像描述子
+        //统计整个图像金字塔中的特征点
+        int nkeypoints = 0;
+        //开始遍历每层图像金字塔，并且累加每层的特征点个数
+        for (int level = 0; level < nlevels; ++level)
+            nkeypoints += (int) allKeypoints[level].size();
+
+        //如果本图像金字塔中没有任何的特征点
+        if (nkeypoints == 0)
+            //通过调用cv::mat类的.realse方法，强制清空矩阵的引用计数，这样就可以强制释放矩阵的数据了
+            //参考[https://blog.csdn.net/giantchen547792075/article/details/9107877]
+            _descriptors.release();
+        else {
+            //如果图像金字塔中有特征点，那么就创建这个存储描述子的矩阵，注意这个矩阵是存储整个图像金字塔中特征点的描述子的
+            _descriptors.create(nkeypoints,        //矩阵的行数，对应为特征点的总个数
+                                32,            //矩阵的列数，对应为使用32*8=256位描述子
+                                CV_8U);            //矩阵元素的格式
+        }
+        //清空用作返回特征点提取结果的vector容器
+        _keypoints.clear();
+        //并预分配正确大小的空间
+        _keypoints.reserve(nkeypoints);
+
+        //因为遍历是一层一层进行的，但是描述子那个矩阵是存储整个图像金字塔中特征点的描述子，所以在这里设置了Offset变量来保存“寻址”时的偏移量，
+        //辅助进行在总描述子mat中的定位
+        int offset = 0;
+        //开始遍历每一层图像
+        for (int level = 0; level < nlevels; ++level) {
+            //获取在allKeypoints中当前层特征点容器的句柄
+            std::vector<cv::KeyPoint> &keypoints = allKeypoints[level];
+            //本层的特征点数
+            int nkeypointsLevel = (int) keypoints.size();
+
+            //如果特征点数目为0，跳出本次循环，继续下一层金字塔
+            if (nkeypointsLevel == 0)
+                continue;
+
+            // preprocess the resized image
+            //  Step 5 对图像进行高斯模糊
+            // 深拷贝当前金字塔所在层级的图像
+            Mat workingMat = mvImagePyramid[level].clone();
+
+            // 注意：提取特征点的时候，使用的是清晰的原图像；这里计算描述子的时候，为了避免图像噪声的影响，使用了高斯模糊
+            GaussianBlur(workingMat,        //源图像
+                         workingMat,        //输出图像
+                         cv::Size(7, 7),        //高斯滤波器kernel大小，必须为正的奇数
+                         2,                //高斯滤波在x方向的标准差
+                         2,                //高斯滤波在y方向的标准差
+                         cv::BORDER_REFLECT_101);//边缘拓展点插值类型
+
+            // Compute the descriptors 计算描述子
+            // desc存储当前图层的描述子
+            Mat desc = _descriptors.rowRange(offset, offset + nkeypointsLevel);
+            // Step 6 计算高斯模糊后图像的描述子
+            computeDescriptors(workingMat,    //高斯模糊之后的图层图像
+                               keypoints,    //当前图层中的特征点集合
+                               desc,        //存储计算之后的描述子
+                               pattern);    //随机采样模板
+
+            // 更新偏移量的值
+            offset += nkeypointsLevel;
+
+            // Scale keypoint coordinates
+            // Step 6 对非第0层图像中的特征点的坐标恢复到第0层图像（原图像）的坐标系下
+            // ? 得到所有层特征点在第0层里的坐标放到_keypoints里面
+            // 对于第0层的图像特征点，他们的坐标就不需要再进行恢复了
+            if (level != 0) {
+                // 获取当前图层上的缩放系数
+                float scale = mvScaleFactor[level];
+                // 遍历本层所有的特征点
+                for (auto &keypoint: keypoints)
+                    // 特征点本身直接乘缩放倍数就可以了
+                    keypoint.pt *= scale;
+            }
+
+            // And add the keypoints to the output
+            // 将keypoints中内容插入到_keypoints 的末尾
+            // keypoint其实是对allkeypoints中每层图像中特征点的引用，这样allkeypoints中的所有特征点在这里被转存到输出的_keypoints
+            _keypoints.insert(_keypoints.end(), keypoints.begin(), keypoints.end());
+        }
     }
 
     void ORBFeature::UndistortImage() {
@@ -899,7 +1008,7 @@ namespace ORB {
             //注意这里的center下标u可以是负的！中心水平线上的像素按x坐标（也就是u坐标）加权
             m_10 += u * center[u];
 
-        // Go line by line in the circular patch  
+        // Go line by line in the circular patch
         //这里的step1表示这个图像一行包含的字节总数。参考[https://blog.csdn.net/qianqing13579/article/details/45318279]
         int step = (int) image.step1();
         //注意这里是以v=0中心线为对称轴，然后对称地每成对的两行之间进行遍历，这样处理加快了计算速度
@@ -910,7 +1019,7 @@ namespace ORB {
             // 获取某行像素横坐标的最大范围，注意这里的图像块是圆形的！
             int d = u_max[v];
             //在坐标范围内挨个像素遍历，实际是一次遍历2个
-            // 假设每次处理的两个点坐标，中心线下方为(x,y),中心线上方为(x,-y) 
+            // 假设每次处理的两个点坐标，中心线下方为(x,y),中心线上方为(x,-y)
             // 对于某次待处理的两个点：m_10 = Σ x*I(x,y) =  x*I(x,y) + x*I(x,-y) = x*(I(x,y) + I(x,-y))
             // 对于某次待处理的两个点：m_01 = Σ y*I(x,y) =  y*I(x,y) - y*I(x,-y) = y*(I(x,y) - I(x,-y))
             for (int u = -d; u <= d; ++u) {
@@ -931,9 +1040,10 @@ namespace ORB {
         return cv::fastAtan2((float) m_01, (float) m_10);
     }
 
-    void
-    ORBFeature::computeDescriptors(const cv::Mat &image, std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors,
-                                   const std::vector<cv::Point> &pattern) {
+    void ORBFeature::computeDescriptors(const cv::Mat &image,
+                                        std::vector<cv::KeyPoint> &keypoints,
+                                        cv::Mat &descriptors,
+                                        const std::vector<cv::Point> &pattern) {
         //清空保存描述子信息的容器
         descriptors = cv::Mat::zeros((int) keypoints.size(), 32, CV_8UC1);
 
