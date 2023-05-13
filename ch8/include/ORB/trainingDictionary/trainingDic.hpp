@@ -10,29 +10,31 @@
 #include "ORB/tools/tic_toc.hpp"
 
 namespace ORB {
-    class TraingDIC{
-        public:
-            TraingDIC(const std::string& dataSetPath, const std::string& outDICPath, int Depth = 5, int Branch = 10);
-            TraingDIC() = default;
+    class TraingDIC {
+    public:
+        TraingDIC(const std::string &dataSetPath, const std::string &outDICPath, int Depth = 5, int Branch = 10);
 
-            void Run();
+        TraingDIC() = default;
 
-            // 作业
-            void UsingDictionary(const std::string& dicFilePath, const std::string& imgPath);
-        private:
-            void ReadDataSet(const std::string& dataSetPath, std::vector<cv::String>& ImagePath);
+        void Run();
 
-            void DetectDescriptors(const cv::String& image_path, cv::Mat& descriptor);
+        // 作业
+        void UsingDictionary(const std::string &dicFilePath, const std::string &imgPath);
 
-            void DetectDescriptors(const cv::String& imagePath, std::vector<cv::KeyPoint>& vKeyPoints, cv::Mat& descriptor);
+    private:
+        void ReadDataSet(const std::string &dataSetPath, std::vector<cv::String> &ImagePath);
 
-            void traingDictionary(const std::vector<cv::Mat> vdescriptors);
+        void DetectDescriptors(const cv::String &image_path, cv::Mat &descriptor);
 
-        private:
-            int k, d;
-            std::string dataSetPath;
-            std::string outputPath;
-            std::vector<cv::String> vImagePath;
+        void DetectDescriptors(const cv::String &imagePath, std::vector<cv::KeyPoint> &vKeyPoints, cv::Mat &descriptor);
+
+        void traingDictionary(const std::vector<cv::Mat> vdescriptors);
+
+    private:
+        int k, d;
+        std::string dataSetPath;
+        std::string outputPath;
+        std::vector<cv::String> vImagePath;
     };
 }
 

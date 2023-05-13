@@ -1,19 +1,16 @@
 #include "ORB/parameter.hpp"
 
 namespace ORB {
-    Parameter::Parameter(const std::string config_file)
-    {
+    Parameter::Parameter(const std::string config_file) {
         file_path = config_file;
         ReadPara();
     }
-    void Parameter::ReadPara()
-    {
-        if (1)
-        {
+
+    void Parameter::ReadPara() {
+        if (1) {
             // 使用OpenCV函数读取配置文件
             cv::FileStorage file(file_path, cv::FileStorage::READ);
-            if (!file.isOpened())
-            {
+            if (!file.isOpened()) {
                 LOG(ERROR) << "文件打开失败，请检查文件路径";
                 exit(-1);
             }
@@ -34,8 +31,7 @@ namespace ORB {
             minThFAST = file["minThFAST"];
 
             file.release();
-        }
-        else {
+        } else {
             // 使用yaml文件读取配置文件
             YAML::Node slam_node = YAML::LoadFile(file_path);
             fx = slam_node["Camera.fx"].as<double>();
