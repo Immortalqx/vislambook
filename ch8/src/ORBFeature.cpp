@@ -54,6 +54,54 @@ namespace ORB {
          *  请您使用直方图滤除不一致的匹配点对。
          */
 
+        std::vector<int> matches_flag = std::vector<int>(matches.size(), 1);
+
+        // Step 1 构建旋转直方图，HISTO_LENGTH = 30
+        std::vector<int> rotHist[HISTO_LENGTH];
+        for (auto &i: rotHist)
+            // 每个bin里预分配500个，因为使用的是vector不够的话可以自动扩展容量
+            i.reserve(500);
+
+        const float factor = HISTO_LENGTH / 360.0f;
+
+        // Step 2 计算匹配点旋转角度差所在的直方图
+        for (size_t i = 0, iend = matches.size(); i < iend; i++) {
+            // 计算匹配特征点的角度差，这里单位是角度°，不是弧度
+            float rot = keypoints_1[matches[i].queryIdx].angle - keypoints_2[matches[i].trainIdx].angle;
+            if (rot < 0.0)
+                rot += 360.0f;
+            // 前面factor = HISTO_LENGTH/360.0f
+            // bin = rot / 360.of * HISTO_LENGTH 表示当前rot被分配在第几个直方图bin
+            int bin = round(rot * factor);
+            // 如果bin 满了又是一个轮回
+            if (bin == HISTO_LENGTH)
+                bin = 0;
+            assert(bin >= 0 && bin < HISTO_LENGTH);
+            rotHist[bin].push_back(i);
+        }
+
+        // Step 3 筛除旋转直方图中“非主流”部分
+        int ind1 = -1;
+        int ind2 = -1;
+        int ind3 = -1;
+        // 筛选出在旋转角度差落在在直方图区间内数量最多的前三个bin的索引
+        ComputeThreeMaxima(rotHist, HISTO_LENGTH, ind1, ind2, ind3);
+
+        for (int i = 0; i < HISTO_LENGTH; i++) {
+            //if (i == ind1 || i == ind2 || i == ind3)
+            if (i == ind1)
+                continue;
+            // 剔除掉不在前三的匹配对，因为他们不符合“主流旋转方向”
+            for (int idx1: rotHist[i]) {
+                matches_flag[idx1] = -1;
+            }
+        }
+
+        //Update prev matched
+        // Step 4 将最后通过筛选的匹配好的特征点保存到vbPrevMatched
+        for (size_t i1 = 0, iend1 = matches.size(); i1 < iend1; i1++)
+            if (matches_flag[i1] >= 0)
+                good_matches.push_back(matches[i1]);
     }
 
     /**
