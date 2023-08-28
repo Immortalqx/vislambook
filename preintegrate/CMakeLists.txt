@@ -1,0 +1,13 @@
+PROJECT(data)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
+
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
+AUX_SOURCE_DIRECTORY(. DIR_SRCS)
+
+
+set(Eigen3_DIR CMAKE_INSTALL_PREFIX/share/eigen3/cmake)
+
+
+ADD_EXECUTABLE(test src/test.cpp)
+target_link_libraries(test Eigen3::Eigen)
