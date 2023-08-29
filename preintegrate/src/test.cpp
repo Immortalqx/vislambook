@@ -68,30 +68,36 @@ int ComputeMeasurements(const std::vector<double> &picture_stamps, const std::ve
             if ((k == 0) && (k < (n - 1)))//注意第一帧imu数据的处理
             {
                 double t = imudata_tmp[k + 1].stamp - imudata_tmp[k].stamp;//单帧imu时间间隔
-                double t_picture = imudata_tmp[k].stamp - picture_stamps[i + 1];//第一帧imu数据到图像间隔
+                double t_picture = imudata_tmp[k].stamp - picture_stamps[i];//第一帧imu数据到图像间隔
 
                 //*******************补全下面代码*********************//
-                acc =
-                w =
-                t_step =
+                acc = (imudata_tmp[k].acc_ + imudata_tmp[k + 1].acc_ -
+                       (imudata_tmp[k + 1].acc_ - imudata_tmp[k].acc_) * (t_picture / t)) * 0.5f;
+                w = (imudata_tmp[k].omega_ + imudata_tmp[k + 1].omega_ -
+                     (imudata_tmp[k + 1].omega_ - imudata_tmp[k].omega_) * (t_picture / t)) * 0.5f;
+                t_step = imudata_tmp[k + 1].stamp - picture_stamps[i + 1];
             } else if (k < (n - 1))
             {
                 //*******************补全下面代码*********************//
-                acc =
-                w =
-                t_step =
+                acc = (imudata_tmp[k].acc_ + imudata_tmp[k + 1].acc_) * 0.5f;
+                w = (imudata_tmp[k].omega_ + imudata_tmp[k + 1].omega_) * 0.5f;
+                t_step = imudata_tmp[k + 1].stamp - imudata_tmp[k].stamp;
             } else if ((k > 0) && (k == (n - 1)))
             {
                 double t = imudata_tmp[k + 1].stamp - imudata_tmp[k].stamp;//单帧imu时间间隔
                 double t_picture = imudata_tmp[k + 1].stamp - picture_stamps[i + 1];
                 //*******************补全下面代码*********************//
-                acc =
-                w =
-                t_step =
+                acc = (imudata_tmp[k].acc_ + imudata_tmp[k + 1].acc_ -
+                       (imudata_tmp[k + 1].acc_ - imudata_tmp[k].acc_) * (t_picture / t)) * 0.5f;
+                w = (imudata_tmp[k].omega_ + imudata_tmp[k + 1].omega_ -
+                     (imudata_tmp[k + 1].omega_ - imudata_tmp[k].omega_) * (t_picture / t)) * 0.5f;
+                t_step = picture_stamps[i + 1] - imudata_tmp[k].stamp;
             }
             //*******************补全下面3行代码*********************//
             // 记录IMU数据计算出来的加速度，角速度，时间间隔
-
+            preintegration_data_temp.acc_group.push_back(acc);
+            preintegration_data_temp.omega_group.push_back(w);
+            preintegration_data_temp.delta_t.push_back(t_step);
         }
         preintegration_data_temp.imu_data_size = n;//两帧图像之间imu数据数量
         preintegration_data_temp.picture_cur_stamp = picture_stamps[i];//第一张图像的时间戳
